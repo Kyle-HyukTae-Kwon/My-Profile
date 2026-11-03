@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<!-- 휴대폰 화면 크기에 맞춰 보이게 하는 필수 한 줄이에요 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 아이폰 Safari 위아래 바 색을 페이지와 맞춰요 -->
+<meta name="theme-color" content="#a40f16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>권혁태 | 캐릭터 프로필</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap">
+
+<style>
+  /* ===== 1. 색깔 모음: 경희대학교 공식 색상 (PANTONE 기준 RGB 값) ===== */
+  /* 메인 색상은 Kyung Hee Red! 파랑과 금색은 보조로 써요 */
+  :root {
+    --red:  #a40f16;      /* Kyung Hee Red   (201 C, R164 G15 B22)  ← 메인 */
+    --blue: #0d326f;      /* Kyung Hee Blue  (295 C, R13 G50 B111)  */
+    --gold: #c0a353;      /* Kyung Hee Gold  (872 C, R192 G163 B83) */
+
+    --red-deep: #820c12;  /* 버튼을 누를 때 쓰는 진한 빨강 */
+    --red-dark: #4f080c;  /* 배경 아래쪽, 그림자용 아주 진한 빨강 */
+    --card: #faf6ee;      /* 카드 바탕: 호텔 린넨 같은 따뜻한 흰색 */
+    --soft: #e9e1cf;      /* 막대 바탕 등 연한 베이지 */
+    --muted: #5b6785;     /* 연한 글자색 */
+  }
+
+  * { box-sizing: border-box; }
+  html {
+    -webkit-text-size-adjust: 100%;
+    background-color: var(--red-dark);   /* 아이폰에서 화면을 끝까지 당겼을 때 보이는 색 */
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    /* 아이폰 다이내믹 아일랜드(위), 홈 바(아래), 가로모드 양옆 여백을 피해서 배치해요 */
+    padding:
+      max(24px, env(safe-area-inset-top))
+      max(20px, env(safe-area-inset-right))
+      max(24px, env(safe-area-inset-bottom))
+      max(20px, env(safe-area-inset-left));
+    color: var(--blue);
+    font-family: "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 배경: 아이폰 Safari는 background-attachment: fixed 를 지원하지 않아서
+     화면에 고정된 별도 레이어로 깔아요 (붉은 호텔 로비 벽 + 금색 마름모 무늬 + 위에서 내려오는 조명) */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(192, 163, 83, .40), transparent 60%),
+      repeating-linear-gradient(45deg, rgba(192, 163, 83, .12) 0 1px, transparent 1px 22px),
+      repeating-linear-gradient(-45deg, rgba(192, 163, 83, .12) 0 1px, transparent 1px 22px),
+      linear-gradient(var(--red), var(--red-dark));
+  }
+
+  /* 버튼: 아이폰 기본 버튼 모양을 없애고, 두 번 탭해도 확대되지 않게 해요 */
+  button, a { touch-action: manipulation; }
+  button { -webkit-appearance: none; appearance: none; }
+
+  /* ===== 2. 카드 모양 ===== */
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--card);
+    border: 3px solid var(--gold);
+    border-radius: 14px;
+    padding: 20px 20px 24px;
+    box-shadow: 0 0 0 5px var(--red), 0 0 0 7px var(--gold), 0 18px 40px rgba(0, 0, 0, .45);
+  }
+
+  .portrait {
+    position: relative;
+    height: clamp(210px, 64vw, 260px);
+    border-radius: 8px;
+    border: 2px solid var(--gold);
+    overflow: hidden;
+    background: var(--red);
+  }
+  .portrait svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 선택 전: 어두운 그림자 + 물음표 / 선택 후: 호텔리어가 등장 */
+  .silhouette { transition: opacity .4s, transform .4s; }
+  .hero { opacity: 0; transform: translateY(40px) scale(.85); will-change: transform, opacity; }
+
+  /* ===== 3. 선택 전에는 숨겨둘 것들 ===== */
+  .info > * { opacity: 0; transform: translateY(12px); }
+
+  /* ===== 4. Select를 누르면 (.picked 클래스가 붙으면) 나타나는 효과 ===== */
+  .picked .silhouette { opacity: 0; transform: scale(1.2); }
+  .picked .hero {
+    opacity: 1;
+    transform: none;
+    transition: opacity .5s .3s, transform .7s .3s cubic-bezier(.3, 1.5, .5, 1);
+  }
+  .picked .info > * {
+    opacity: 1;
+    transform: none;
+    transition: opacity .4s, transform .4s;
+  }
+  .picked .info > :nth-child(1) { transition-delay: .6s; }
+  .picked .info > :nth-child(2) { transition-delay: .75s; }
+  .picked .info > :nth-child(3) { transition-delay: .9s; }
+  .picked .info > :nth-child(4) { transition-delay: 1.2s; }
+  .picked .info > :nth-child(5) { transition-delay: 1.4s; }
+
+  /* ===== 5. 이름 / 전공 / 한 줄 대사 ===== */
+  .name {
+    margin: 18px 0 2px;
+    color: var(--red);
+    font-weight: 900;
+    font-size: 2rem;
+    letter-spacing: 0;
+  }
+  .major { margin: 0 0 14px; color: var(--muted); }
+
+  .quote {
+    display: inline-block;
+    margin: 0 0 18px;
+    padding: 8px 16px;
+    background: #fff;
+    border: 2px solid var(--red);
+    border-radius: 18px;
+    font-weight: 700;
+  }
+
+  /* ===== 6. 능력치 막대 ===== */
+  .stats {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .stats li {
+    display: grid;
+    grid-template-columns: 4.6em 1fr 2em;
+    align-items: center;
+    gap: 10px;
+    font-size: .95rem;
+  }
+  .stats .bar {
+    height: 12px;
+    background: var(--soft);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .stats .bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--gold);
+    border-radius: 99px;
+  }
+  /* --v 에 적힌 숫자만큼 막대가 차올라요 */
+  .picked .stats .bar i {
+    width: calc(var(--v) * 1%);
+    transition: width .9s 1.3s ease-out;
+  }
+  .stats b { text-align: right; }
+
+  /* ===== 7. 링크 3개 ===== */
+  .links { display: flex; gap: 8px; }
+  .links a,
+  .links button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    border: 2px solid var(--gold);
+    border-radius: 8px;
+    background: var(--gold);      /* 금색 버튼 + 흰색 글자 */
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .35);   /* 흰 글자가 금색 위에서 더 잘 보이게 살짝 그림자 */
+    text-decoration: none;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .links a:hover, .links a:active,
+  .links button:hover, .links button:active { background: var(--blue); border-color: var(--blue); }
+
+  /* Mail 버튼을 누르면 나타나는 주소 상자 */
+  .mail-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 8px 8px 14px;
+    background: #fff;
+    border: 2px solid var(--gold);
+    border-radius: 8px;
+    font-weight: 700;
+    word-break: break-all;
+  }
+  .mail-box[hidden] { display: none; }
+  .mail-box span { -webkit-user-select: text; user-select: text; }
+  .mail-box button {
+    flex: none;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--red);
+    color: #fff;
+    font: 700 .9rem "Noto Sans KR", sans-serif;
+    cursor: pointer;
+  }
+  .mail-box button:hover, .mail-box button:active { background: var(--red-deep); }
+
+  /* ===== 8. Select 버튼 ===== */
+  .select {
+    display: block;
+    width: 100%;
+    min-height: 52px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--red);
+    color: #fff;
+    font: 700 1.1rem "Noto Sans KR", sans-serif;
+    cursor: pointer;
+  }
+  .select:hover, .select:active { background: var(--red-deep); }
+
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+  /* ===== 9. 아주 작은 휴대폰(가로 360px 이하)용 ===== */
+  @media (max-width: 360px) {
+    body { padding-left: 14px; padding-right: 14px; }
+    .card { padding: 16px 14px 20px; }
+    .name { font-size: 1.75rem; }
+    .stats li { grid-template-columns: 4.2em 1fr 1.8em; gap: 8px; font-size: .9rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .01s !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+
+<body>
+  <!-- id="card" 에 "picked" 가 붙었다 떨어졌다 하면서 효과가 켜지고 꺼져요 -->
+  <main class="card" id="card">
+
+    <div class="portrait">
+
+      <!-- (A) 5성급 호텔 로비 배경: 사진 없이 코드로만 그렸어요 -->
+      <svg viewBox="0 0 200 250" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4f080c"/>
+            <stop offset="1" stop-color="#a40f16"/>
+          </linearGradient>
+          <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0" stop-color="#f6e7bd" stop-opacity=".85"/>
+            <stop offset="1" stop-color="#f6e7bd" stop-opacity="0"/>
+          </radialGradient>
+          <pattern id="marble" width="24" height="12" patternUnits="userSpaceOnUse">
+            <rect width="24" height="12" fill="#efe8d6"/>
+            <rect width="12" height="6" fill="#d8cfb6"/>
+            <rect x="12" y="6" width="12" height="6" fill="#d8cfb6"/>
+          </pattern>
+        </defs>
+
+        <rect width="200" height="250" fill="url(#wall)"/>
+
+        <!-- 별 5개: 5성급 표시 -->
+        <text x="100" y="16" text-anchor="middle" font-size="11" fill="#c0a353" letter-spacing="3">★★★★★</text>
+
+        <!-- 양쪽 아치형 창문 -->
+        <path d="M18 192 V104 Q18 74 42 74 Q66 74 66 104 V192 Z" fill="#f6e7bd" fill-opacity=".30" stroke="#c0a353" stroke-width="3"/>
+        <path d="M134 192 V104 Q134 74 158 74 Q182 74 182 104 V192 Z" fill="#f6e7bd" fill-opacity=".30" stroke="#c0a353" stroke-width="3"/>
+        <path d="M42 74 V192 M18 130 H66 M158 74 V192 M134 130 H182" stroke="#c0a353" stroke-width="1.5" fill="none"/>
+
+        <!-- 샹들리에 -->
+        <circle cx="100" cy="40" r="34" fill="url(#glow)"/>
+        <path d="M100 20 V30" stroke="#c0a353" stroke-width="2"/>
+        <path d="M78 40 Q100 26 122 40 L114 48 H86 Z" fill="#c0a353"/>
+        <g fill="#f6e7bd">
+          <circle cx="86" cy="54" r="2.5"/><circle cx="100" cy="57" r="2.5"/><circle cx="114" cy="54" r="2.5"/>
+        </g>
+
+        <!-- 프런트 데스크와 벨 -->
+        <rect x="0" y="170" width="200" height="26" fill="#4f080c"/>
+        <rect x="0" y="167" width="200" height="4" fill="#c0a353"/>
+        <path d="M150 167 Q160 150 170 167 Z" fill="#c0a353"/>
+        <rect x="148" y="165" width="24" height="3" rx="1.5" fill="#a98d3f"/>
+        <circle cx="160" cy="151" r="2" fill="#c0a353"/>
+
+        <!-- 바닥: 대리석 + 파란 카펫 -->
+        <rect x="0" y="196" width="200" height="54" fill="url(#marble)"/>
+        <polygon points="66,250 134,250 114,196 86,196" fill="#0d326f"/>
+        <path d="M66 250 L86 196 M134 250 L114 196" stroke="#c0a353" stroke-width="2"/>
+      </svg>
+
+      <!-- (B) 선택 전: 어두운 그림자 + 물음표 -->
+      <svg class="silhouette" viewBox="0 0 200 250" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <rect width="200" height="250" fill="#2a0407" fill-opacity=".55"/>
+        <ellipse cx="100" cy="100" rx="43" ry="52" fill="#2a0407" fill-opacity=".85"/>
+        <path d="M25 250 C25 175 58 152 100 152 C142 152 175 175 175 250 Z" fill="#2a0407" fill-opacity=".85"/>
+        <text x="100" y="122" text-anchor="middle" font-size="60" font-weight="700" fill="#c0a353">?</text>
+      </svg>
+
+      <!-- (C) 선택 후: 호텔리어 (파란 정장, 붉은 넥타이, 금색 명찰) -->
+      <svg class="hero" viewBox="0 0 200 250" preserveAspectRatio="xMidYMid slice" role="img" aria-label="정장을 입은 호텔리어 캐릭터">
+        <!-- 정장 재킷과 라펠 -->
+        <path d="M25 250 C25 175 58 152 100 152 C142 152 175 175 175 250 Z" fill="#0d326f" stroke="#c0a353" stroke-width="1.5"/>
+        <path d="M86 152 L100 186 L70 214 L58 168 Z" fill="#164687"/>
+        <path d="M114 152 L100 186 L130 214 L142 168 Z" fill="#164687"/>
+        <!-- 셔츠와 넥타이 -->
+        <path d="M86 152 L100 184 L114 152 Z" fill="#faf6ee"/>
+        <path d="M100 160 L94 172 L100 206 L106 172 Z" fill="#a40f16"/>
+        <!-- 단추, 명찰, 포켓 스퀘어 -->
+        <circle cx="100" cy="222" r="4.5" fill="#c0a353"/>
+        <circle cx="100" cy="240" r="4.5" fill="#c0a353"/>
+        <rect x="126" y="192" width="26" height="10" rx="2" fill="#c0a353"/>
+        <rect x="130" y="196" width="12" height="2" rx="1" fill="#0d326f"/>
+        <path d="M58 198 L72 198 L70 206 L60 206 Z" fill="#a40f16"/>
+
+        <!-- 머리: 단정한 호텔리어 스타일 (짧은 옆가르마).
+             뒷머리 → 목 → 얼굴 → 앞머리 순서로 겹쳐요.
+             뒷머리가 얼굴보다 크고 앞머리가 이마 위를 덮어서 살구색이 튀어나오지 않아요 -->
+        <g fill="#231a14">
+          <ellipse cx="100" cy="90" rx="41" ry="38"/>
+          <ellipse cx="96" cy="58" rx="30" ry="9"/>
+        </g>
+        <rect x="91" y="140" width="18" height="16" fill="#e8b88f"/>
+        <ellipse cx="100" cy="108" rx="38" ry="42" fill="#f2c9a5"/>
+        <!-- 앞머리: 깔끔하게 한쪽으로 넘긴 옆가르마 -->
+        <path d="M62 96 C56 52 144 52 138 94 C136 82 124 72 104 70 C94 70 86 70 82 72 C74 76 66 86 62 96 Z" fill="#231a14"/>
+        <!-- 가르마 선과 머릿결 -->
+        <path d="M84 54 L83 71" stroke="#7a6350" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g stroke="#4a382b" stroke-width="2.2" fill="none" stroke-linecap="round">
+          <path d="M87 58 Q112 50 134 68"/><path d="M91 64 Q112 58 130 74"/>
+        </g>
+        <circle cx="84" cy="113" r="4.5" fill="#231a14"/>
+        <circle cx="116" cy="113" r="4.5" fill="#231a14"/>
+        <path d="M86 131 Q100 143 114 131" stroke="#231a14" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <!-- 이름, 능력치, 링크 (선택 후에 순서대로 나타나요) -->
+    <div class="info">
+      <h1 class="name">권혁태</h1>
+      <p class="major">경희대학교 호텔경영학과</p>
+      <p class="quote">“Housekeeping?”</p>
+
+      <!-- 능력치: --v 뒤의 숫자(0~100)를 바꾸면 막대 길이가 바뀌어요 -->
+      <ul class="stats">
+        <li style="--v:70"><span>체력</span><div class="bar"><i></i></div><b>70</b></li>
+        <li style="--v:85"><span>인내력</span><div class="bar"><i></i></div><b>85</b></li>
+        <li style="--v:90"><span>친화력</span><div class="bar"><i></i></div><b>90</b></li>
+        <li style="--v:95"><span>공감능력</span><div class="bar"><i></i></div><b>95</b></li>
+      </ul>
+
+      <!-- 링크: href="" 안의 주소를 바꾸면 눌렀을 때 이동하는 곳이 바뀌어요 -->
+      <nav class="links">
+        <a href="https://github.com/Kyle-HyukTae-Kwon" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.instagram.com/hyuk_means_shine/" target="_blank" rel="noopener">SNS</a>
+        <button type="button" id="mailBtn" aria-expanded="false" aria-controls="mailBox">Mail</button>
+      </nav>
+
+      <!-- Mail 버튼을 누르면 이 상자가 나타나서 메일 주소를 보여줘요 -->
+      <div class="mail-box" id="mailBox" hidden>
+        <span id="mailText">gurxo0315@naver.com</span>
+        <button type="button" id="copyBtn">복사</button>
+      </div>
+    </div>
+
+    <button class="select" id="selectBtn" type="button">Select</button>
+  </main>
+
+  <script>
+    // 버튼을 누르면 카드에 "picked" 이름표를 붙였다 뗐다 해요.
+    const card = document.getElementById("card");
+    const btn = document.getElementById("selectBtn");
+
+    btn.addEventListener("click", function () {
+      const picked = card.classList.toggle("picked");
+      btn.textContent = picked ? "다시 선택" : "Select";
+    });
+
+    // Mail 버튼을 누르면 메일 주소 상자를 보였다 숨겼다 해요.
+    const mailBtn = document.getElementById("mailBtn");
+    const mailBox = document.getElementById("mailBox");
+
+    mailBtn.addEventListener("click", function () {
+      mailBox.hidden = !mailBox.hidden;
+      mailBtn.setAttribute("aria-expanded", String(!mailBox.hidden));
+    });
+
+    // "복사" 버튼을 누르면 메일 주소를 복사해요.
+    const copyBtn = document.getElementById("copyBtn");
+    const mailText = document.getElementById("mailText").textContent;
+
+    copyBtn.addEventListener("click", async function () {
+      try {
+        await navigator.clipboard.writeText(mailText);
+      } catch (e) {
+        // 복사 기능이 막혀 있으면 주소를 선택해서 복사하는 방법을 써요.
+        const t = document.createElement("textarea");
+        t.value = mailText;
+        t.setAttribute("readonly", "");
+        t.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px;";
+        document.body.appendChild(t);
+        t.select();
+        t.setSelectionRange(0, mailText.length);   // 아이폰에서는 이 줄이 꼭 필요해요
+        document.execCommand("copy");
+        t.remove();
+      }
+      copyBtn.textContent = "복사됨!";
+      setTimeout(function () { copyBtn.textContent = "복사"; }, 1500);
+    });
+
+    // 아이폰 Safari에서 버튼을 누르는 순간의 색 변화(:active)가 보이게 해주는 한 줄이에요.
+    document.addEventListener("touchstart", function () {}, { passive: true });
+  </script>
+</body>
+</html>
