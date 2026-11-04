@@ -1,0 +1,694 @@
+<title>시험 스터디 플래너</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Layout: 한 줄 기둥(최대 960px) — 요약 숫자 → PDF 정리 → 약한 개념 → 과목별 체크리스트 순 */
+  /* 흰 배경 + 하늘색 포인트 (AGENTS.md 규칙). 어두운 모드 없이 항상 밝은 화면 */
+  :root {
+    --bg: #ffffff; --surface: #ffffff; --field: #f6fbfe; --fg: #17242f; --muted: #5d6e7c; --line: #d9e8f2;
+    --accent: #3cb1ec; --accent-strong: #0a78b8; --accent-fg: #0b2a3d; --accent-soft: #e8f6fd;
+    --on-color: #ffffff; --danger: #c84040; --done: #2f8a57;
+    --s1: #d64545; --s2: #df7428; --s3: #b88f12; --s4: #5f9f37; --s5: #2f8a57;
+    --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --font-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 960px; margin: 0 auto; padding-block: 20px 60px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+  h2 { font-size: 16px; margin: 0; text-wrap: balance; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+  #syncState { margin-left: auto; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat .label { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .stat.key { background: var(--accent-soft); border-color: var(--accent); }
+  .stat.key .value { color: var(--accent-strong); }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .running { align-items: center; gap: 12px; background: var(--accent-soft); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; }
+  .running .t { font-size: 20px; font-weight: 600; margin-left: auto; }
+
+  /* PDF → 체크리스트 */
+  .ai-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
+  .ai-grid { display: grid; grid-template-columns: 1fr 160px; gap: 10px; }
+  .ai-grid .wide { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+  @media (max-width: 640px) { .ai-grid { grid-template-columns: 1fr; } }
+  .ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  #aiStatus { margin: 0; }
+  #aiStatus.err { color: var(--danger); }
+  .preview { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .preview ol { margin: 4px 0 0; padding-left: 20px; columns: 2; column-gap: 28px; }
+  .preview li { break-inside: avoid; font-size: 14px; }
+  @media (max-width: 640px) { .preview ol { columns: 1; } }
+
+  .weak ul { list-style: none; margin: 10px 0 0; padding: 0; }
+  .weak li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); flex-wrap: wrap; }
+  .weak li:last-child { border-bottom: 0; }
+  .weak .rest { margin-left: auto; }
+
+  .subject-head { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+  .subject-head .sum { margin-left: auto; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }
+  .bar > div { height: 100%; background: var(--accent); }
+
+  .concept { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "chk main scores need act" ". memo memo memo memo"; gap: 6px 12px; align-items: center;
+    padding: 10px 0; border-top: 1px solid var(--line); }
+  .concept .chk { grid-area: chk; } .concept .main { grid-area: main; min-width: 0; }
+  .concept .scores { grid-area: scores; } .concept .need-wrap { grid-area: need; } .concept .act { grid-area: act; }
+  .concept .memo { grid-area: memo; min-width: 0; }
+  @media (max-width: 720px) {
+    .concept { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "chk main act" ". scores need" ". memo memo"; }
+  }
+  .memo textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--accent); background: var(--field);
+    border-radius: 8px; padding: 8px 10px; font: inherit; color: inherit; line-height: 1.5; }
+  .memo-snip { font-size: 13px; color: var(--accent-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icon.has-memo { color: var(--accent-strong); font-weight: 600; }
+  .concept .name { font-weight: 500; overflow-wrap: anywhere; }
+  .concept .meta { font-size: 13px; color: var(--muted); }
+  .concept.is-running { background: var(--accent-soft); margin-inline: -16px; padding-inline: 16px; }
+  .concept.is-done .name { text-decoration: line-through; color: var(--muted); }
+  .chk input { width: 20px; height: 20px; accent-color: var(--done); cursor: pointer; }
+
+  .badge { display: inline-block; min-width: 22px; text-align: center; padding: 0 6px; border-radius: 5px;
+    font-size: 12px; font-weight: 600; color: var(--on-color); }
+  .scores { display: flex; gap: 4px; }
+  .scores button { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); font-weight: 600; cursor: pointer; font-family: var(--font-num); }
+  .scores button.sel { color: var(--on-color); border-color: transparent; }
+
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 500; }
+  .btn.play { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 13px; }
+  .btn.play.on { background: var(--danger); border-color: var(--danger); color: var(--on-color); }
+  .icon { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+  .icon:hover, .icon.armed { color: var(--danger); background: var(--accent-soft); }
+  input[type=text], input[type=number], input[type=date], input[type=file] { border: 1px solid var(--line); background: var(--field);
+    border-radius: 8px; padding: 6px 10px; min-width: 0; width: 100%; }
+  input.need { width: 64px; text-align: right; color: var(--fg); }
+  /* 비어 있으면 연한 추천값, 직접 넣은 값은 진하게 + 하늘색 테두리 */
+  input.need::placeholder { color: var(--muted); opacity: .55; }
+  input.need.custom { font-weight: 600; border-color: var(--accent); background: var(--accent-soft); }
+  .add-row { display: flex; gap: 8px; margin-top: 10px; }
+  .add-row input { flex: 1; }
+  .need-wrap { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+  .act { display: flex; gap: 2px; align-items: center; }
+
+  details summary { cursor: pointer; font-weight: 500; }
+  .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .onboard { display: flex; flex-direction: column; gap: 10px; border-style: dashed; }
+  .onboard ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="examTitle"></h1>
+    <span class="muted num" id="examDateText"></span>
+    <span class="muted" id="syncState">이 브라우저에 저장</span>
+  </header>
+
+  <div class="stats">
+    <div class="stat key"><div class="label">시험까지</div><div class="value num" id="dday"></div></div>
+    <div class="stat"><div class="label">완료한 개념</div><div class="value num" id="doneCount"></div></div>
+    <div class="stat"><div class="label">남은 필요 시간</div><div class="value num" id="totalRemain"></div></div>
+    <div class="stat key"><div class="label">하루 평균 필요</div><div class="value num" id="perDay"></div></div>
+  </div>
+
+  <div class="running" id="runningBar" hidden>
+    <span>공부 중</span><strong id="runningName"></strong>
+    <span class="t num" id="runningTime"></span>
+    <button class="btn" id="runningStop">정지</button>
+  </div>
+
+  <section class="card" id="aiCard">
+    <div class="ai-head">
+      <h2>시험 범위 PDF로 체크리스트 만들기</h2>
+      <span class="muted">PDF를 넣으면 Claude가 과목별 개념 체크리스트로 정리해요.</span>
+    </div>
+    <form id="aiForm" class="ai-grid">
+      <label class="field">시험명<input type="text" id="aiName" placeholder="비워 두면 PDF에서 찾아요"></label>
+      <label class="field">시험일<input type="date" id="aiDate"></label>
+      <label class="field wide">과목 (선택, 쉼표로 구분)<input type="text" id="aiSubjects" placeholder="예: 수출입실무, 국제무역규칙, 외환관련여신"></label>
+      <label class="field wide">시험 범위 PDF<input type="file" id="aiFile" accept="application/pdf,.pdf" required></label>
+      <div class="ai-actions wide">
+        <button class="btn primary" id="aiRun" type="submit">체크리스트 만들기</button>
+        <button class="btn" id="aiStop" type="button" hidden>중지</button>
+        <p class="muted" id="aiStatus" role="status"></p>
+      </div>
+    </form>
+    <div class="preview" id="aiPreview" hidden></div>
+  </section>
+
+  <section class="card weak">
+    <h2>약한 개념</h2>
+    <div id="weakList"></div>
+  </section>
+
+  <div id="subjects" style="display:flex;flex-direction:column;gap:16px"></div>
+
+  <section class="card">
+    <form class="add-row" id="addSubjectForm" style="margin-top:0">
+      <input type="text" id="newSubject" placeholder="과목 직접 추가">
+      <button class="btn">과목 추가</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>설정</summary>
+      <div class="settings-grid">
+        <label class="field">시험 이름<input type="text" id="setName"></label>
+        <label class="field">시험일<input type="date" id="setDate"></label>
+      </div>
+      <p class="muted" style="margin:14px 0 0">이해도별 추천 공부 시간(시간). 개념마다 직접 입력하면 그 값이 우선합니다.</p>
+      <div class="settings-grid" id="setDefaults"></div>
+      <div class="ai-actions">
+        <button class="btn" id="resetAll" type="button">전체 비우기</button>
+        <span class="muted">과목·개념·공부 기록을 모두 지우고 처음 상태로 돌아가요.</span>
+      </div>
+    </details>
+  </section>
+</div>
+
+<script>
+const KEY = 'study-planner-v1';
+const SCORE_LABEL = { 1: '전혀 모름', 2: '조금 앎', 3: '보통', 4: '거의 앎', 5: '완벽' };
+const uid = () => Math.random().toString(36).slice(2, 10);
+const $ = id => document.getElementById(id);
+
+const newConcept = (name, ref = '') => ({ id: uid(), name, ref, score: null, customHours: null, seconds: 0, done: false, memo: '' });
+const openMemos = new Set(); // 지금 펼쳐 둔 메모 (화면에서만 기억)
+
+// 처음에는 비어 있고, 시험 범위 PDF를 넣으면 채워진다
+function defaultState() {
+  return {
+    examName: '',
+    examDate: '',
+    defaults: { 1: 3, 2: 2, 3: 1, 4: 0.5, 5: 0 },
+    subjects: [],
+    running: null // { conceptId, start }
+  };
+}
+
+// 예전 버전이 미리 깔아 둔 외환전문역 목록을 손대지 않은 채라면 비운다
+const isLegacySeed = s => !s.source && s.examName === '외환전문역 2종' &&
+  s.subjects.every(x => x.concepts.every(c => c.score == null && !c.seconds && !c.done && c.customHours == null));
+
+function normalize(s) {
+  if (!s || !Array.isArray(s.subjects)) return defaultState();
+  s.subjects.forEach(x => { x.concepts = x.concepts || []; });
+  if (isLegacySeed(s)) return { ...defaultState(), defaults: s.defaults || defaultState().defaults };
+  s.subjects.forEach(x => x.concepts.forEach(c => { c.done = !!c.done; c.seconds = c.seconds || 0; c.memo = c.memo || ''; }));
+  s.defaults = s.defaults || defaultState().defaults;
+  return s;
+}
+
+let state;
+try { state = normalize(JSON.parse(localStorage.getItem(KEY))); }
+catch { state = defaultState(); }
+
+// ---------- 저장: claude.ai 계정(가능할 때) + 이 브라우저 ----------
+let remoteRef = null, remoteTimer = null, remoteChain = Promise.resolve();
+function save() {
+  state.source ||= 'user';
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  if (!remoteRef) return;
+  clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(() => {
+    const body = JSON.parse(JSON.stringify(state));
+    remoteChain = remoteChain.then(() => remoteRef.set(body))
+      .then(() => setSync('claude.ai 계정에 저장됨'))
+      .catch(() => setSync('계정 저장 실패 · 이 브라우저에만 저장됨 (새로고침하면 다시 시도해요)'));
+  }, 600);
+}
+const setSync = t => { $('syncState').textContent = t; };
+
+async function initRemote() {
+  if (!window.claude?.use) return;
+  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+  if (!db || !user) return;
+  const id = await user.id();
+  if (!id) return;
+  const ref = db.doc(`data/users/${id}/planner`);
+  try {
+    const snap = await ref.get();
+    if (snap.exists) {
+      state = normalize(JSON.parse(JSON.stringify(snap.data())));
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+      renderSettings(); render();
+    } else {
+      await ref.set(JSON.parse(JSON.stringify(state)));
+    }
+    remoteRef = ref;
+    setSync('claude.ai 계정에 저장됨');
+  } catch { setSync('이 브라우저에만 저장됨'); }
+}
+// ---------- 계산 ----------
+const allConcepts = () => state.subjects.flatMap(s => s.concepts.map(c => ({ s, c })));
+const findConcept = id => allConcepts().find(x => x.c.id === id) || null;
+const spentSec = c => c.seconds + (state.running && state.running.conceptId === c.id
+  ? Math.floor((Date.now() - state.running.start) / 1000) : 0);
+const recommendedH = c => state.defaults[c.score ?? 3];
+const neededH = c => c.customHours ?? recommendedH(c);
+const remainSec = c => c.done ? 0 : Math.max(0, neededH(c) * 3600 - spentSec(c));
+
+function daysLeft() {
+  if (!state.examDate) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const exam = new Date(state.examDate + 'T00:00:00');
+  return Math.round((exam - today) / 86400000);
+}
+
+const fmtHM = sec => {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
+  return h ? `${h}시간 ${m}분` : `${m}분`;
+};
+const fmtClock = sec => [Math.floor(sec / 3600), Math.floor(sec % 3600 / 60), sec % 60]
+  .map(n => String(n).padStart(2, '0')).join(':');
+const scoreColor = s => s ? `var(--s${s})` : 'var(--muted)';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const liveText = c => `공부 ${fmtHM(spentSec(c))} · 남은 ${fmtHM(remainSec(c))}` +
+  (c.done ? ' · 완료' : c.score == null ? ' · 이해도 미평가' : ' · ' + SCORE_LABEL[c.score]);
+
+// ---------- 타이머 ----------
+function stopTimer() {
+  if (!state.running) return;
+  const hit = findConcept(state.running.conceptId);
+  if (hit) hit.c.seconds += Math.floor((Date.now() - state.running.start) / 1000);
+  state.running = null;
+}
+function toggleTimer(id) {
+  const wasMe = state.running && state.running.conceptId === id;
+  stopTimer();
+  if (!wasMe) state.running = { conceptId: id, start: Date.now() };
+  save(); render();
+}
+
+// ---------- 렌더 ----------
+function renderStats() {
+  const all = allConcepts().map(x => x.c);
+  const remain = all.reduce((a, c) => a + remainSec(c), 0);
+  const d = daysLeft();
+  $('examTitle').textContent = state.examName || '시험 스터디 플래너';
+  $('examDateText').textContent = state.examDate ? `시험일 ${state.examDate}` : '시험일 미정';
+  $('dday').textContent = d == null ? '-' : d > 0 ? `D-${d}` : d === 0 ? 'D-DAY' : `D+${-d}`;
+  $('doneCount').textContent = `${all.filter(c => c.done).length} / ${all.length}`;
+  $('totalRemain').textContent = fmtHM(remain);
+  $('perDay').textContent = d > 0 ? fmtHM(Math.ceil(remain / d)) : '-';
+
+  const hit = state.running && findConcept(state.running.conceptId);
+  $('runningBar').hidden = !hit;
+  if (hit) {
+    $('runningName').textContent = `${hit.s.name} · ${hit.c.name}`;
+    $('runningTime').textContent = fmtClock(Math.floor((Date.now() - state.running.start) / 1000));
+  }
+}
+
+function playBtn(c) {
+  const on = state.running?.conceptId === c.id;
+  return `<button class="btn play ${on ? 'on' : ''}" data-act="timer" data-id="${c.id}" aria-label="${on ? '정지' : '공부 시작'}">${on ? '■' : '▶'}</button>`;
+}
+
+function renderWeak() {
+  const open = allConcepts().filter(({ c }) => !c.done);
+  const unrated = open.filter(({ c }) => c.score == null).length;
+  const items = open.filter(({ c }) => c.score != null && c.score <= 3)
+    // 1→2→3점 순, 같은 점수면 남은 시간이 많은 개념 먼저
+    .sort((a, b) => a.c.score - b.c.score || remainSec(b.c) - remainSec(a.c));
+  const note = unrated ? `<div class="empty">아직 이해도를 매기지 않은 개념이 ${unrated}개 있어요. 미평가 개념은 3점(보통)으로 보고 필요 시간을 계산해요.</div>` : '';
+  if (!allConcepts().length) {
+    $('weakList').innerHTML = '<div class="empty">체크리스트가 생기면 이해도 1~3점인 개념이 여기에 모여요.</div>';
+    return;
+  }
+  if (!items.length) {
+    $('weakList').innerHTML = note || '<div class="empty">이해도 3점 이하인 미완료 개념이 없어요.</div>';
+    return;
+  }
+  $('weakList').innerHTML = note + '<ul>' + items.map(({ s, c }) => `
+    <li>
+      <span class="badge" style="background:${scoreColor(c.score)}">${c.score}</span>
+      <span>${esc(c.name)}</span><span class="muted">${esc(s.name)}</span>
+      <span class="rest muted num">남은 ${fmtHM(remainSec(c))}</span>
+      ${playBtn(c)}
+    </li>`).join('') + '</ul>';
+}
+
+function renderSubjects() {
+  if (!state.subjects.length) {
+    $('subjects').innerHTML = `
+    <section class="card onboard">
+      <h2>아직 체크리스트가 없어요</h2>
+      <ol>
+        <li>위에서 시험일을 정하고 시험 범위 PDF(강의노트, 출제기준 등)를 고르세요.</li>
+        <li><strong>체크리스트 만들기</strong>를 누르면 Claude가 과목별 개념과 페이지 범위로 정리해요.</li>
+        <li>미리보기를 확인하고 <strong>이대로 적용</strong>을 누르면 여기에 과목별 체크리스트가 생겨요.</li>
+      </ol>
+      <p class="muted" style="margin:0">PDF 없이 쓰려면 아래에서 과목을 직접 추가해도 돼요.</p>
+    </section>`;
+    return;
+  }
+  $('subjects').innerHTML = state.subjects.map(s => {
+    const spent = s.concepts.reduce((a, c) => a + spentSec(c), 0);
+    const done = s.concepts.filter(c => c.done).length;
+    const pct = s.concepts.length ? done / s.concepts.length * 100 : 0;
+    return `
+    <section class="card">
+      <div class="subject-head">
+        <h2>${esc(s.name)}</h2>
+        <span class="muted num">완료 ${done}/${s.concepts.length}</span>
+        <span class="sum muted num">공부 ${fmtHM(spent)}</span>
+        <button class="icon" data-act="delSubject" data-id="${s.id}">과목 삭제</button>
+      </div>
+      <div class="bar" aria-hidden="true"><div style="width:${pct}%"></div></div>
+      ${s.concepts.length ? '' : '<div class="empty">아직 개념이 없어요. 아래에서 추가하세요.</div>'}
+      ${s.concepts.map(c => `
+        <div class="concept ${state.running?.conceptId === c.id ? 'is-running' : ''} ${c.done ? 'is-done' : ''}">
+          <label class="chk"><input type="checkbox" id="done-${c.id}" data-act="done" data-id="${c.id}" ${c.done ? 'checked' : ''} aria-label="완료"></label>
+          <div class="main">
+            <div class="name">${esc(c.name)}</div>
+            <div class="meta">${c.ref ? `<span class="num">${esc(c.ref)}</span> · ` : ''}<span class="live num">${liveText(c)}</span></div>
+            ${c.memo && !openMemos.has(c.id) ? `<div class="memo-snip">메모: ${esc(c.memo.split('\n')[0])}</div>` : ''}
+          </div>
+          <div class="scores">${[1, 2, 3, 4, 5].map(n => `
+            <button class="${c.score === n ? 'sel' : ''}" style="${c.score === n ? `background:${scoreColor(n)}` : ''}"
+              title="${SCORE_LABEL[n]}" data-act="score" data-id="${c.id}" data-n="${n}">${n}</button>`).join('')}
+          </div>
+          <label class="need-wrap" title="${c.customHours != null ? '직접 넣은 시간이에요. 지우면 이해도 기준 추천 시간으로 돌아가요.' : '이해도 기준 추천 시간이에요. 숫자를 넣으면 그 값을 써요.'}">
+            필요 <input class="need num ${c.customHours != null ? 'custom' : ''}" type="number" id="need-${c.id}" min="0" step="0.5" data-act="need" data-id="${c.id}"
+              value="${c.customHours ?? ''}" placeholder="${recommendedH(c)}">시간
+          </label>
+          <div class="act">${playBtn(c)}
+            <button class="icon ${c.memo ? 'has-memo' : ''}" data-act="memo" data-id="${c.id}" aria-expanded="${openMemos.has(c.id)}">${openMemos.has(c.id) ? '메모 닫기' : '메모'}</button>
+            <button class="icon" data-act="delConcept" data-id="${c.id}" aria-label="개념 삭제">✕</button></div>
+          ${openMemos.has(c.id) ? `<div class="memo"><textarea id="memo-${c.id}" data-act="memoText" data-id="${c.id}" aria-label="${esc(c.name)} 메모"
+            placeholder="헷갈린 점, 외울 것, 틀린 문제 등을 적어 두세요. 적는 대로 저장돼요.">${esc(c.memo)}</textarea></div>` : ''}
+        </div>`).join('')}
+      <form class="add-row" data-act="addConcept" data-id="${s.id}">
+        <input type="text" id="add-${s.id}" placeholder="개념 추가" required>
+        <button class="btn">추가</button>
+      </form>
+    </section>`;
+  }).join('');
+}
+
+function renderSettings() {
+  $('setName').value = state.examName;
+  $('setDate').value = state.examDate;
+  $('aiName').value = $('aiName').value || state.examName;
+  $('aiDate').value = $('aiDate').value || state.examDate;
+  $('setDefaults').innerHTML = [1, 2, 3, 4, 5].map(n => `
+    <label class="field">${n}점 · ${SCORE_LABEL[n]}<input type="number" id="def-${n}" min="0" step="0.5" data-def="${n}" value="${state.defaults[n]}"></label>`).join('');
+}
+
+function render() { renderStats(); renderWeak(); renderSubjects(); }
+
+// 삭제는 두 번 눌러야 실행 (이 화면에서는 확인 창이 뜨지 않음)
+let armed = null;
+function confirmTwice(btn, label) {
+  const key = btn.dataset.act + btn.dataset.id;
+  if (armed?.key === key) { clearTimeout(armed.timer); armed = null; return true; }
+  if (armed) { clearTimeout(armed.timer); render(); }
+  const again = document.querySelector(`[data-act="${btn.dataset.act}"][data-id="${btn.dataset.id}"]`);
+  again.classList.add('armed'); again.textContent = label;
+  armed = { key, timer: setTimeout(() => { armed = null; render(); }, 3000) };
+  return false;
+}
+
+// ---------- 이벤트 ----------
+document.addEventListener('click', e => {
+  const t = e.target.closest('button[data-act]');
+  if (!t) return;
+  const id = t.dataset.id;
+  if (t.dataset.act === 'timer') toggleTimer(id);
+  if (t.dataset.act === 'memo') {
+    openMemos.has(id) ? openMemos.delete(id) : openMemos.add(id);
+    render();
+    $(`memo-${id}`)?.focus();
+  }
+  if (t.dataset.act === 'score') {
+    const { c } = findConcept(id);
+    const n = +t.dataset.n;
+    c.score = c.score === n ? null : n;
+    save(); render();
+  }
+  if (t.dataset.act === 'delConcept') {
+    if (!confirmTwice(t, '삭제?')) return;
+    const { s } = findConcept(id);
+    if (state.running?.conceptId === id) state.running = null;
+    s.concepts = s.concepts.filter(x => x.id !== id);
+    save(); render();
+  }
+  if (t.dataset.act === 'delSubject') {
+    if (!confirmTwice(t, '한 번 더 누르면 삭제')) return;
+    const s = state.subjects.find(x => x.id === id);
+    if (state.running && s.concepts.some(c => c.id === state.running.conceptId)) state.running = null;
+    state.subjects = state.subjects.filter(x => x.id !== id);
+    save(); render();
+  }
+});
+
+document.addEventListener('submit', e => {
+  const f = e.target.closest('form[data-act="addConcept"]');
+  if (!f) return;
+  e.preventDefault();
+  const name = f.querySelector('input').value.trim();
+  if (!name) return;
+  state.subjects.find(s => s.id === f.dataset.id).concepts.push(newConcept(name));
+  save(); render();
+  $(`add-${f.dataset.id}`).focus();
+});
+
+// 메모는 적는 대로 저장 (화면을 다시 그리지 않아서 입력이 끊기지 않음)
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.act !== 'memoText') return;
+  const { c } = findConcept(t.dataset.id);
+  c.memo = t.value;
+  document.querySelector(`[data-act="memo"][data-id="${c.id}"]`)?.classList.toggle('has-memo', !!c.memo.trim());
+  save();
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.act === 'done') {
+    const { c } = findConcept(t.dataset.id);
+    c.done = t.checked;
+    if (c.done && state.running?.conceptId === c.id) stopTimer();
+    save(); render();
+  }
+  if (t.dataset.act === 'need') {
+    const { c } = findConcept(t.dataset.id);
+    c.customHours = t.value === '' ? null : Math.max(0, +t.value);
+    save(); render();
+  }
+  if (t.dataset.def) {
+    state.defaults[t.dataset.def] = Math.max(0, +t.value || 0);
+    save(); render();
+  }
+  if (t.id === 'setName') { state.examName = t.value.trim(); save(); render(); }
+  if (t.id === 'setDate' && t.value) { state.examDate = t.value; save(); render(); }
+});
+
+$('addSubjectForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('newSubject').value.trim();
+  if (!name) return;
+  state.subjects.push({ id: uid(), name, concepts: [] });
+  $('newSubject').value = '';
+  save(); render();
+});
+$('runningStop').onclick = () => { stopTimer(); save(); render(); };
+
+let resetArmed = null;
+$('resetAll').onclick = () => {
+  const btn = $('resetAll');
+  if (!resetArmed) {
+    btn.textContent = '한 번 더 누르면 모두 지워요';
+    resetArmed = setTimeout(() => { resetArmed = null; btn.textContent = '전체 비우기'; }, 3000);
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = null; btn.textContent = '전체 비우기';
+  state = { ...defaultState(), defaults: state.defaults };
+  $('aiName').value = ''; $('aiDate').value = '';
+  save(); renderSettings(); render();
+};
+
+// ---------- PDF → AI 체크리스트 ----------
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsReady = null;
+function loadPdfJs() {
+  pdfjsReady ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = PDFJS + 'pdf.min.js';
+    s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; resolve(pdfjsLib); };
+    s.onerror = () => { pdfjsReady = null; reject(new Error('PDF 읽기 도구를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.')); };
+    document.head.append(s);
+  });
+  return pdfjsReady;
+}
+
+async function extractPages(file, onPage) {
+  const lib = await loadPdfJs();
+  let pdf;
+  try {
+    pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+  } catch (err) {
+    throw new Error(err?.name === 'PasswordException'
+      ? '암호가 걸린 PDF는 읽을 수 없어요. 암호를 푼 파일로 다시 넣어 주세요.'
+      : 'PDF 파일을 열지 못했어요. 파일이 손상되지 않았는지 확인하고 다시 넣어 주세요.');
+  }
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const tc = await (await pdf.getPage(i)).getTextContent();
+    pages.push(tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').replace(/\n\s*/g, '\n').trim());
+    onPage(i, pdf.numPages);
+  }
+  return pages;
+}
+
+// 페이지마다 앞부분(제목·소제목이 있는 곳)만 잘라 전체를 약 6만 자 안으로 맞춘다
+function digest(pages) {
+  const per = Math.max(150, Math.min(1500, Math.floor(60000 / Math.max(1, pages.length))));
+  return pages.map((t, i) => `[p.${i + 1}] ${t.slice(0, per)}`).join('\n');
+}
+
+function buildPrompt(text, name, subjects) {
+  return `너는 자격시험 학습 코치야. 아래는 시험 범위 PDF에서 뽑은 페이지별 텍스트야(각 페이지의 앞부분만, [p.N]이 페이지 번호).
+이 자료로 공부 체크리스트를 만들어.
+
+규칙:
+- examName: ${name ? `"${name}"를 그대로 써.` : '문서에서 시험 이름을 찾아(예: "외환전문역 2종"). 없으면 문서 제목을 짧게.'}
+- examDate: 문서에 시험 날짜가 있으면 "YYYY-MM-DD", 없으면 "".
+- subjects: ${subjects.length ? `과목은 다음 이름과 순서를 그대로 써: ${subjects.join(', ')}.` : '문서의 시험 과목 구성(시험 안내·출제기준·과목 소개 페이지)을 찾아 그 순서대로. 과목 구분이 없으면 큰 단원을 과목으로.'}
+- 과목 name: 문서가 과목에 번호를 매기면 "1과목 수출입실무"처럼 번호를 붙여. 아니면 과목명만.
+- note: 그 과목의 문항 수·배점을 문서에서 찾아 "35문항·50점"처럼 짧게. 없으면 "".
+- concepts: 과목마다 공부 단위 개념을 5~20개, 문서 순서대로. 한 개념은 1~3시간 분량으로 묶어.
+  · 문서의 용어를 그대로 쓰고, 세부 항목은 괄호로: "무역관리제도 (통합공고·원산지표시)".
+  · 조문·법령이 이어지면 몇 개씩 묶어: "UCP600 제14–17조 서류심사·일치제시".
+  · 표지·목차·OT·시험 안내 페이지는 개념으로 넣지 마.
+- pages: 그 개념이 나오는 페이지 범위를 "p.12–15" 형식으로(한 쪽이면 "p.12"). 모르면 "".
+
+JSON 하나로만 답해:
+{"examName": "string", "examDate": "string", "subjects": [{"name": "string", "note": "string", "concepts": [{"name": "string", "pages": "string"}]}]}
+
+--- 문서 텍스트 ---
+${text}`;
+}
+
+let aiCtl = null, aiResult = null;
+const aiStatus = (msg, err = false) => { $('aiStatus').textContent = msg; $('aiStatus').classList.toggle('err', err); };
+const AI_ERR = {
+  not_granted: 'Claude 사용을 허용하지 않아 정리할 수 없어요. 허용하려면 페이지를 새로고침한 뒤 다시 시도하세요.',
+  sampling_disabled: '이 계정에서는 Claude 정리를 쓸 수 없어요.',
+  rate_limited: '요청이 많아 잠시 막혔어요. 몇 분 뒤 다시 눌러 주세요.',
+  prompt_too_large: 'PDF 텍스트가 너무 길어요. 시험 범위 부분만 담은 PDF로 다시 시도하세요.',
+  invalid_json: '정리 결과를 읽지 못했어요. 다시 눌러 주세요.',
+  session_expired: 'claude.ai 로그인이 만료됐어요. 다시 로그인해 주세요.',
+  refused: 'Claude가 이 문서를 정리하지 않았어요. 다른 PDF로 시도해 보세요.'
+};
+
+$('aiForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const file = $('aiFile').files[0];
+  if (!file) return;
+  const sample = window.claude?.use ? await claude.use('sample') : null;
+  if (!sample) { aiStatus('AI 정리는 claude.ai 링크로 열었을 때만 돼요. 내 컴퓨터의 파일 말고 claude.ai 링크로 열어 주세요.', true); return; }
+
+  $('aiRun').disabled = true; $('aiStop').hidden = false; $('aiPreview').hidden = true;
+  aiCtl = new AbortController();
+  try {
+    aiStatus('PDF 읽는 중…');
+    const pages = await extractPages(file, (i, n) => aiStatus(`PDF 읽는 중… ${i}/${n}쪽`));
+    if (aiCtl.signal.aborted) throw { code: 'cancelled' };
+    if (pages.join('').trim().length < 50) throw new Error('PDF에서 글자를 찾지 못했어요. 사진이나 스캔으로 된 PDF는 읽을 수 없으니, 글자를 마우스로 고를 수 있는 PDF로 다시 넣어 주세요.');
+    aiStatus(`${pages.length}쪽을 Claude가 정리하는 중… (1~2분 걸릴 수 있어요)`);
+    const subjects = $('aiSubjects').value.split(',').map(x => x.trim()).filter(Boolean);
+    const out = await sample.json(buildPrompt(digest(pages), $('aiName').value.trim(), subjects), { signal: aiCtl.signal });
+    if (!Array.isArray(out?.subjects) || !out.subjects.length) throw { code: 'invalid_json' };
+    aiResult = out;
+    showPreview(out);
+    aiStatus('정리가 끝났어요. 아래 내용을 확인하고 적용하세요.');
+  } catch (err) {
+    if (err?.code === 'cancelled') aiStatus('중지했어요.');
+    // 코드가 있는 오류(Claude 쪽)는 영어 원문 대신 우리말 안내만 보여 준다
+    else aiStatus(AI_ERR[err?.code] || (!err?.code && err?.message) || '정리하는 중에 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요.', true);
+  } finally {
+    $('aiRun').disabled = false; $('aiStop').hidden = true; aiCtl = null;
+  }
+});
+$('aiStop').onclick = () => aiCtl?.abort();
+
+const subjectLabel = s => s.note ? `${s.name} (${s.note})` : String(s.name);
+const validDate = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || '')) ? String(d) : '';
+
+function showPreview(out) {
+  const total = out.subjects.reduce((a, s) => a + (s.concepts?.length || 0), 0);
+  $('aiPreview').innerHTML = `
+    <div><strong>${esc($('aiName').value.trim() || out.examName || '이름 없는 시험')}</strong>
+      <span class="muted num"> · 시험일 ${esc($('aiDate').value || validDate(out.examDate) || '미정')} · 과목 ${out.subjects.length}개 · 개념 ${total}개</span></div>
+    ${out.subjects.map(s => `
+      <div><h2>${esc(subjectLabel(s))}</h2>
+        <ol>${(s.concepts || []).map(c => `<li>${esc(c.name)} <span class="muted num">${esc(c.pages)}</span></li>`).join('')}</ol>
+      </div>`).join('')}
+    <p class="muted" style="margin:0">적용하면 지금 체크리스트를 바꿔요. 이름이 같은 개념은 이해도·공부 시간·완료 표시·메모를 그대로 이어받아요.</p>
+    <div class="ai-actions" style="margin-top:0">
+      <button class="btn primary" id="aiApply" type="button">이대로 적용</button>
+      <button class="btn" id="aiCancel" type="button">취소</button>
+    </div>`;
+  $('aiPreview').hidden = false;
+  $('aiApply').onclick = applyResult;
+  $('aiCancel').onclick = () => { $('aiPreview').hidden = true; aiResult = null; aiStatus(''); };
+}
+
+function applyResult() {
+  if (!aiResult) return;
+  stopTimer();
+  const old = new Map(allConcepts().map(({ c }) => [c.name.trim(), c]));
+  state.subjects = aiResult.subjects.map(s => ({
+    id: uid(), name: subjectLabel(s),
+    concepts: (s.concepts || []).filter(c => c?.name).map(c => {
+      const prev = old.get(String(c.name).trim());
+      return prev ? { ...prev, ref: String(c.pages || prev.ref || '') } : newConcept(String(c.name), String(c.pages || ''));
+    })
+  }));
+  state.examName = $('aiName').value.trim() || String(aiResult.examName || '') || state.examName;
+  state.examDate = $('aiDate').value || validDate(aiResult.examDate) || state.examDate;
+  state.source = 'pdf';
+  aiResult = null;
+  $('aiPreview').hidden = true;
+  aiStatus('체크리스트를 적용했어요.');
+  save(); renderSettings(); render();
+}
+
+// 타이머가 도는 동안 1초마다 숫자만 갱신 (입력 중인 칸이 초기화되지 않도록 전체 렌더는 하지 않음)
+setInterval(() => {
+  if (!state.running) return;
+  renderStats();
+  const hit = findConcept(state.running.conceptId);
+  if (hit) document.querySelectorAll('.concept.is-running .live').forEach(m => { m.textContent = liveText(hit.c); });
+}, 1000);
+
+renderSettings();
+render();
+initRemote();
+</script>
